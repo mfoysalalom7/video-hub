@@ -1,0 +1,6 @@
+{
+  "name": "VideoHub",
+  "description": "ভিডিও দেখা ও অফলাইন ডাউনলোড - Watch videos online, download for offline viewing, and play local media.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
