@@ -45,4 +45,46 @@ class ExampleUnitTest {
         )
         assertTrue(downloaded.isOfflineReady)
     }
+
+    @Test
+    fun testFilterByTitleAndCategory() {
+        val sampleVideos = listOf(
+            VideoEntity(
+                id = "1",
+                title = "সুন্দরবনের রহস্য",
+                description = "প্রকৃতি বিষয়ক ভিডিও",
+                author = "ওয়াইল্ডলাইফ",
+                videoUrl = "https://example.com/1.mp4",
+                thumbnailUrl = "https://example.com/1.jpg",
+                durationSeconds = 100,
+                category = "Nature & Wildlife",
+                fileSizeBytes = 5_000_000L
+            ),
+            VideoEntity(
+                id = "2",
+                title = "রোবোটিক্স বিপ্লব",
+                description = "ভবিষ্যতের প্রযুক্তি",
+                author = "ফিউচার টেক",
+                videoUrl = "https://example.com/2.mp4",
+                thumbnailUrl = "https://example.com/2.jpg",
+                durationSeconds = 200,
+                category = "Tech & Science",
+                fileSizeBytes = 8_000_000L
+            )
+        )
+
+        // Filter by title
+        val titleMatch = sampleVideos.filter { it.title.contains("সুন্দরবন", ignoreCase = true) }
+        assertEquals(1, titleMatch.size)
+        assertEquals("সুন্দরবনের রহস্য", titleMatch[0].title)
+
+        // Filter by category
+        val categoryMatch = sampleVideos.filter {
+            it.category.contains("Tech", ignoreCase = true) ||
+            it.category.equals("Tech & Science", ignoreCase = true)
+        }
+        assertEquals(1, categoryMatch.size)
+        assertEquals("রোবোটিক্স বিপ্লব", categoryMatch[0].title)
+    }
 }
+

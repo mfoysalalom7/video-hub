@@ -44,17 +44,38 @@ fun HomeScreen(
     modifier: Modifier = Modifier
 ) {
     val filteredVideos = remember(videos, searchQuery, selectedCategory) {
+        val query = searchQuery.trim()
         videos.filter { video ->
-            val matchesCategory = selectedCategory == VideoCategory.ALL ||
+            // Category chip matching
+            val matchesCategoryChip = selectedCategory == VideoCategory.ALL ||
                     video.category.equals(selectedCategory.englishName, ignoreCase = true) ||
                     video.category.equals(selectedCategory.bengaliName, ignoreCase = true)
 
-            val matchesSearch = if (searchQuery.isBlank()) true else {
-                video.title.contains(searchQuery, ignoreCase = true) ||
-                video.author.contains(searchQuery, ignoreCase = true) ||
-                video.description.contains(searchQuery, ignoreCase = true)
+            // Search query matching (matches Title, Category in Bengali or English, or Author)
+            val matchesSearch = if (query.isBlank()) {
+                true
+            } else {
+                // 1. Check title match
+                val matchesTitle = video.title.contains(query, ignoreCase = true)
+
+                // 2. Check category match (both stored string and localized category names)
+                val matchesCategoryDirect = video.category.contains(query, ignoreCase = true)
+                val matchesCategoryName = VideoCategory.values().filter { it != VideoCategory.ALL }.any { cat ->
+                    val queryMatchesCategory = cat.bengaliName.contains(query, ignoreCase = true) ||
+                            cat.englishName.contains(query, ignoreCase = true)
+                    val videoBelongsToCategory = video.category.equals(cat.englishName, ignoreCase = true) ||
+                            video.category.equals(cat.bengaliName, ignoreCase = true)
+                    queryMatchesCategory && videoBelongsToCategory
+                }
+
+                // 3. Check author or description
+                val matchesAuthor = video.author.contains(query, ignoreCase = true)
+                val matchesDesc = video.description.contains(query, ignoreCase = true)
+
+                matchesTitle || matchesCategoryDirect || matchesCategoryName || matchesAuthor || matchesDesc
             }
-            matchesCategory && matchesSearch
+
+            matchesCategoryChip && matchesSearch
         }
     }
 
@@ -108,125 +129,264 @@ fun HomeScreen(
         },
         modifier = modifier
     ) { innerPadding ->
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(bottom = 24.dp)
+                .padding(innerPadding)
         ) {
-            // Search Input
-            item {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = onSearchQueryChange,
-                    placeholder = { Text("ভিডিও বা চ্যানেল অনুসন্ধান করুন...") },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = "Search",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { onSearchQueryChange("") }) {
-                                Icon(imageVector = Icons.Default.Close, contentDescription = "Clear")
+            // Pinned Search Bar & Category Header at the top of the video list
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 2.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    // Search Bar
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = onSearchQueryChange,
+                        placeholder = {
+                            Text(
+                                text = "শিরোনাম বা ক্যাটাগরি দিয়ে খুঁজুন...",
+                                fontSize = 14.sp
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "অনুসন্ধান",
+                                tint = if (searchQuery.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(
+                                    onClick = { onSearchQueryChange("") },
+                                    modifier = Modifier.testTag("clear_search_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "মুছুন",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("video_search_bar")
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Categories horizontal row
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("category_filter_row")
+                    ) {
+                        items(VideoCategory.values()) { category ->
+                            val isSelected = category == selectedCategory
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { onSelectCategory(category) },
+                                label = {
+                                    Text(
+                                        text = category.bengaliName,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                    selectedLabelColor = Color.White
+                                ),
+                                shape = RoundedCornerShape(20.dp),
+                                modifier = Modifier.testTag("category_chip_${category.name}")
+                            )
+                        }
+                    }
+
+                    // Active Search & Filter Status
+                    if (searchQuery.isNotBlank() || selectedCategory != VideoCategory.ALL) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = buildString {
+                                    if (searchQuery.isNotBlank()) {
+                                        append("\"${searchQuery.trim()}\" ")
+                                    }
+                                    if (selectedCategory != VideoCategory.ALL) {
+                                        append("[${selectedCategory.bengaliName}] ")
+                                    }
+                                    append("• ${filteredVideos.size} টি ভিডিও")
+                                },
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+
+                            TextButton(
+                                onClick = {
+                                    onSearchQueryChange("")
+                                    onSelectCategory(VideoCategory.ALL)
+                                },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier.height(28.dp).testTag("reset_all_filters_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.FilterAltOff,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "ফিল্টার রিসেট",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
                             }
                         }
-                    },
-                    singleLine = true,
-                    shape = RoundedCornerShape(14.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp)
-                        .testTag("home_search_field")
-                )
-            }
-
-            // Categories horizontal row
-            item {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(VideoCategory.values()) { category ->
-                        val isSelected = category == selectedCategory
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = { onSelectCategory(category) },
-                            label = { Text(category.bengaliName) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                selectedLabelColor = Color.White
-                            ),
-                            shape = RoundedCornerShape(20.dp),
-                            modifier = Modifier.testTag("category_chip_${category.name}")
-                        )
                     }
                 }
             }
 
-            // Hero Featured Video Card (Show when no search is active and on ALL category)
-            if (searchQuery.isBlank() && selectedCategory == VideoCategory.ALL && heroVideo != null) {
+            // Scrollable Video List Area
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .testTag("home_video_list"),
+                contentPadding = PaddingValues(bottom = 24.dp)
+            ) {
+                // Hero Featured Video Card (Show when no search or category filter is active)
+                if (searchQuery.isBlank() && selectedCategory == VideoCategory.ALL && heroVideo != null) {
+                    item {
+                        FeaturedHeroCard(
+                            video = heroVideo,
+                            onPlayClick = { onVideoClick(heroVideo) },
+                            onDownloadClick = { onDownloadClick(heroVideo) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 10.dp)
+                        )
+                    }
+                }
+
+                // Section Header
                 item {
-                    FeaturedHeroCard(
-                        video = heroVideo,
-                        onPlayClick = { onVideoClick(heroVideo) },
-                        onDownloadClick = { onDownloadClick(heroVideo) },
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 10.dp)
-                    )
-                }
-            }
-
-            // Section Header
-            item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = if (searchQuery.isNotBlank()) "অনুসন্ধান ফলাফল (${filteredVideos.size})" else "জনপ্রিয় ভিডিও সমূহ",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-
-            // Video Cards List
-            if (filteredVideos.isEmpty()) {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(32.dp),
-                        contentAlignment = Alignment.Center
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "কোনো ভিডিও পাওয়া যায়নি",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = if (searchQuery.isNotBlank() || selectedCategory != VideoCategory.ALL)
+                                "অনুসন্ধান ফলাফল (${filteredVideos.size})"
+                            else
+                                "জনপ্রিয় ভিডিও সমূহ",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }
-            } else {
-                items(filteredVideos, key = { it.id }) { video ->
-                    OnlineVideoCard(
-                        video = video,
-                        onVideoClick = { onVideoClick(video) },
-                        onDownloadClick = { onDownloadClick(video) },
-                        onFavoriteClick = { onToggleFavorite(video) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
+
+                // Video Cards List
+                if (filteredVideos.isEmpty()) {
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 24.dp)
+                                .testTag("no_search_results_card")
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(60.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.SearchOff,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(32.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(14.dp))
+                                Text(
+                                    text = "কোনো ভিডিও পাওয়া যায়নি",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = if (searchQuery.isNotBlank())
+                                        "\"$searchQuery\" এর সাথে কোনো ভিডিওর শিরোনাম বা ক্যাটাগরি মেলেনি। প্রকৃতি, প্রযুক্তি, সিনেমা, টিউটোরিয়াল বা গান লিখে অনুসন্ধান করুন।"
+                                    else
+                                        "এই ক্যাটাগরিতে বর্তমানে কোনো ভিডিও পাওয়া যায়নি।",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Button(
+                                    onClick = {
+                                        onSearchQueryChange("")
+                                        onSelectCategory(VideoCategory.ALL)
+                                    },
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.testTag("reset_search_empty_button")
+                                ) {
+                                    Icon(imageVector = Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("সব ভিডিও দেখুন")
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    items(filteredVideos, key = { it.id }) { video ->
+                        OnlineVideoCard(
+                            video = video,
+                            onVideoClick = { onVideoClick(video) },
+                            onDownloadClick = { onDownloadClick(video) },
+                            onFavoriteClick = { onToggleFavorite(video) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
                 }
             }
         }
@@ -486,11 +646,32 @@ fun OnlineVideoCard(
 
                     Spacer(modifier = Modifier.height(4.dp))
 
-                    Text(
-                        text = "${video.author} • ${FormatUtils.formatFileSize(video.fileSizeBytes)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(top = 2.dp)
+                    ) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                text = getCategoryLabel(video.category),
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+
+                        Text(
+                            text = "${video.author} • ${FormatUtils.formatFileSize(video.fileSizeBytes)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
 
                     // Downloading progress indicator if active
                     if (video.downloadStatus == VideoEntity.DOWNLOAD_STATUS_DOWNLOADING) {
@@ -664,4 +845,12 @@ fun OnlineVideoCard(
             }
         }
     }
+}
+
+private fun getCategoryLabel(categoryStr: String): String {
+    val matched = VideoCategory.values().find {
+        it.englishName.equals(categoryStr, ignoreCase = true) ||
+        it.bengaliName.equals(categoryStr, ignoreCase = true)
+    }
+    return matched?.bengaliName ?: categoryStr
 }
